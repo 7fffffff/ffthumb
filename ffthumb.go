@@ -31,10 +31,12 @@ func findFFMpeg(path string) string {
 	return ""
 }
 
-// If FFmpegPath is blank, Thumbnailer will look for ffmpeg in PATH.
+// If either FFmpegPath or FFprobePath is blank, Thumbnailer will look
+// in PATH for ffmpeg or ffprobe.
 type Thumbnailer struct {
-	Num        int    // number of candidate thumbnails
-	FFmpegPath string // path to ffmpeg
+	Num         int    // number of candidate thumbnails
+	FFmpegPath  string // path to ffmpeg
+	FFprobePath string // path to ffprobe
 }
 
 // WriteThumbnail writes a png image to output, with the same dimensions
@@ -49,6 +51,10 @@ func (p *Thumbnailer) WriteThumbnail(ctx context.Context, output io.Writer, inpu
 	if ffmpegPath == "" {
 		return errors.New("ffthumb: couldn't find ffmpeg")
 	}
+	ffprobePath := findFFProbe(p.FFprobePath)
+	if ffprobePath == "" {
+		return errors.New("ffthumb: couldn't find ffprobe")
+	}
 	var err error
 	inputPath, err = filepath.Abs(inputPath)
 	if err != nil {
@@ -58,26 +64,38 @@ func (p *Thumbnailer) WriteThumbnail(ctx context.Context, output io.Writer, inpu
 	if candidates < 1 {
 		candidates = 1
 	}
-	cmd := exec.CommandContext(ctx,
-		ffmpegPath,
+	videoFilter, err := aspectFilter(ctx, ffprobePath, inputPath)
+	if err != nil {
+		return fmt.Errorf("ffthumb: %w", err)
+	}
+	ffmpegParams := []string{
 		"-loglevel", "16",
 		"-skip_frame", "nokey",
 		"-i", inputPath,
+	}
+	if videoFilter != "" {
+		ffmpegParams = append(ffmpegParams, "-vf", videoFilter)
+	}
+	ffmpegParams = append(ffmpegParams,
 		"-frames:v", strconv.Itoa(candidates),
 		"-vsync", "vfr",
 		"-y",
 		"%d.png",
 	)
+	cmd := exec.CommandContext(ctx, ffmpegPath, ffmpegParams...)
 	cmd.Dir, err = ioutil.TempDir("", "ffthumb-")
 	if err != nil {
 		return fmt.Errorf("ffthumb: couldn't create temporary dir: %w", err)
 	}
 	defer os.RemoveAll(cmd.Dir)
-	errBuf := bytes.NewBuffer(nil)
-	cmd.Stderr = errBuf
+	stderr := bytes.NewBuffer(nil)
+	cmd.Stderr = stderr
 	err = cmd.Run()
 	if err != nil {
-		return fmt.Errorf("ffthumb: ffmpeg error: %s: %w", strings.TrimSpace(errBuf.String()), err)
+		if _, ok := err.(*exec.ExitError); ok {
+			return fmt.Errorf("ffthumb: ffmpeg: %v", strings.TrimSpace(stderr.String()))
+		}
+		return fmt.Errorf("ffthumb: ffmpeg: %w", err)
 	}
 	largestSize := int64(0)
 	largestPath := ""

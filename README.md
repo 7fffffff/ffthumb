@@ -4,7 +4,10 @@
 Given a video file, ffthumb chooses a thumbnail image by extracting the first
 few keyframes and selecting the largest and least compressible file.
 
-FFmpeg is used for keyframe extraction and is not provided.
+ffmpeg is used for keyframe extraction and is not provided.
+
+ffprobe is used to determine if aspect ratio correction is required, and is
+also not provided.
 
 Documentation:
 https://godoc.org/github.com/7fffffff/ffthumb
