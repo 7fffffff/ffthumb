@@ -9,31 +9,6 @@ import (
 	"strings"
 )
 
-type ffProbeStream struct {
-	CodecType          string `json:"codec_type"`
-	SampleAspectRatio  string `json:"sample_aspect_ratio"`
-	DisplayAspectRatio string `json:"display_aspect_ratio"`
-}
-
-type ffProbe struct {
-	Streams []ffProbeStream `json:"streams"`
-}
-
-func findFFProbe(path string) string {
-	if path != "" {
-		p, err := exec.LookPath(path)
-		if err == nil {
-			return p
-		}
-		return ""
-	}
-	p, err := exec.LookPath("ffprobe")
-	if err == nil {
-		return p
-	}
-	return ""
-}
-
 // If the video is anamorphic (pixel aspect ratio doesn't match the display
 // aspect ratio), we need to scale the thumbnail output appropriately. If
 // no scaling is required, the returned filter is ""

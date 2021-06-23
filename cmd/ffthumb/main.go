@@ -89,18 +89,21 @@ func pickWorker(ctx context.Context, wg *sync.WaitGroup, input chan string, n in
 	}
 }
 
-func pick(ctx context.Context, inputPath string, n int) error {
+func pick(ctx context.Context, inputPath string, n int) (err error) {
 	if n < 1 {
 		n = 1
 	}
 	outputPath := inputPath + ".png"
 	thumbnailer := &ffthumb.Thumbnailer{Num: n}
+	thumbnailer.LookupExec()
 	file, err := os.Create(outputPath)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		file.Close()
+		if err == nil {
+			err = file.Close()
+		}
 		if err != nil {
 			os.Remove(file.Name())
 		}

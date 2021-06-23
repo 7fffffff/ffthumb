@@ -16,27 +16,21 @@ import (
 	"strings"
 )
 
-func findFFMpeg(path string) string {
-	if path != "" {
-		p, err := exec.LookPath(path)
-		if err == nil {
-			return p
-		}
-		return ""
-	}
-	p, err := exec.LookPath("ffmpeg")
-	if err == nil {
-		return p
-	}
-	return ""
-}
-
-// If either FFmpegPath or FFprobePath is blank, Thumbnailer will look
-// in PATH for ffmpeg or ffprobe.
 type Thumbnailer struct {
 	Num         int    // number of candidate thumbnails
 	FFmpegPath  string // path to ffmpeg
 	FFprobePath string // path to ffprobe
+}
+
+// LookupExec fills in FFmpegPath or FFprobePath if either is empty, by
+// calling exec.LookPath to find the binaries in PATH
+func (p *Thumbnailer) LookupExec() {
+	if p.FFmpegPath == "" {
+		p.FFmpegPath = findFFMpeg(p.FFmpegPath)
+	}
+	if p.FFprobePath == "" {
+		p.FFprobePath = findFFProbe(p.FFprobePath)
+	}
 }
 
 // WriteThumbnail writes a png image to output, with the same dimensions
@@ -46,14 +40,14 @@ type Thumbnailer struct {
 // thumbnails, then choosing the largest (in terms of file size). This
 // is based on the idea that the largest, least compressible thumbnail
 // image is likely to contain something interesting to look at.
+//
+// FFmpegPath and FFprobePath must be set before calling WriteThumbnail.
 func (p *Thumbnailer) WriteThumbnail(ctx context.Context, output io.Writer, inputPath string) error {
-	ffmpegPath := findFFMpeg(p.FFmpegPath)
-	if ffmpegPath == "" {
-		return errors.New("ffthumb: couldn't find ffmpeg")
+	if p.FFmpegPath == "" {
+		return errors.New("ffthumb: missing path to ffmpeg")
 	}
-	ffprobePath := findFFProbe(p.FFprobePath)
-	if ffprobePath == "" {
-		return errors.New("ffthumb: couldn't find ffprobe")
+	if p.FFprobePath == "" {
+		return errors.New("ffthumb: missing path to ffprobe")
 	}
 	var err error
 	inputPath, err = filepath.Abs(inputPath)
@@ -64,7 +58,7 @@ func (p *Thumbnailer) WriteThumbnail(ctx context.Context, output io.Writer, inpu
 	if candidates < 1 {
 		candidates = 1
 	}
-	videoFilter, err := aspectFilter(ctx, ffprobePath, inputPath)
+	videoFilter, err := aspectFilter(ctx, p.FFprobePath, inputPath)
 	if err != nil {
 		return fmt.Errorf("ffthumb: %w", err)
 	}
@@ -82,7 +76,7 @@ func (p *Thumbnailer) WriteThumbnail(ctx context.Context, output io.Writer, inpu
 		"-y",
 		"%d.png",
 	)
-	cmd := exec.CommandContext(ctx, ffmpegPath, ffmpegParams...)
+	cmd := exec.CommandContext(ctx, p.FFmpegPath, ffmpegParams...)
 	cmd.Dir, err = ioutil.TempDir("", "ffthumb-")
 	if err != nil {
 		return fmt.Errorf("ffthumb: couldn't create temporary dir: %w", err)
@@ -119,7 +113,7 @@ func (p *Thumbnailer) WriteThumbnail(ctx context.Context, output io.Writer, inpu
 		return fmt.Errorf("ffthumb: couldn't read thumbnails: %w", err)
 	}
 	if largestPath == "" {
-		return errors.New("ffthumb: could not select a thumbnail")
+		return errors.New("ffthumb: couldn't select a thumbnail")
 	}
 	selected, err := os.Open(filepath.Join(cmd.Dir, largestPath))
 	if err != nil {
